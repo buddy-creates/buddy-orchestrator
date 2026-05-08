@@ -19,8 +19,17 @@ from buddy.audit import (
 )
 from buddy.config import load_environment
 from buddy.executors import codex, fallback, gpt_oss
-from buddy.github import status as github_status
-from buddy.planning import load_context, load_projects
+from buddy.github import (
+    create_pull_request_with_files,
+    parse_repository,
+    status as github_status,
+)
+from buddy.planning import (
+    create_planning_task,
+    load_context,
+    load_projects,
+    load_repository_context,
+)
 from buddy.router import classify
 
 
@@ -36,7 +45,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Buddy Orchestrator",
     description="Private local agent-control server for OpenClaw.",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -136,11 +145,66 @@ class PlanningContextResponse(BaseModel):
     source: str
     registry: dict[str, Any]
     operating_model: dict[str, Any]
+    actions: dict[str, Any]
     message: str
+
+
+class ProjectIssuesResponse(BaseModel):
+    source: str
+    repository: str
+    issues: list[dict[str, Any]]
+    issue_count: int
+    state: str
+    message: str
+
+
+class PlanningTaskRequest(BaseModel):
+    title: str = Field(..., min_length=1)
+    repository: str | None = None
+    body: str = ""
+    labels: list[str] = Field(default_factory=list)
+    assignees: list[str] = Field(default_factory=list)
+
+
+class PlanningTaskResponse(BaseModel):
+    source: str
+    repository: str
+    issue: dict[str, Any]
+    message: str
+
+
+class PullRequestFile(BaseModel):
+    path: str = Field(..., min_length=1)
+    content: str
+    message: str | None = None
+
+
+class PullRequestRequest(BaseModel):
+    repository: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    body: str = ""
+    files: list[PullRequestFile] = Field(..., min_length=1)
+    head_branch: str | None = None
+    base_branch: str | None = None
+    commit_message: str | None = None
+
+
+class PullRequestResponse(BaseModel):
+    repository: str
+    base_branch: str
+    head_branch: str
+    pull_request: dict[str, Any]
+    files: list[dict[str, Any]]
 
 
 def _latency_ms(start: float) -> int:
     return round((time.perf_counter() - start) * 1000)
+
+
+def _model_dump(model: BaseModel) -> dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump(exclude_none=True)
+    return model.dict(exclude_none=True)
 
 
 def _dispatch(text: str, route: dict[str, Any]) -> dict[str, Any]:
@@ -315,6 +379,132 @@ def planning_context() -> PlanningContextResponse:
         latency_ms=_latency_ms(start),
     )
     return PlanningContextResponse(**output)
+
+
+@app.get("/projects/{owner}/{repo}/issues", response_model=ProjectIssuesResponse)
+def project_issues(
+    owner: str,
+    repo: str,
+    state: str = "open",
+    limit: int = 30,
+) -> ProjectIssuesResponse:
+    if state not in {"open", "closed", "all"}:
+        raise HTTPException(status_code=400, detail="state must be open, closed, or all.")
+
+    start = time.perf_counter()
+    repository = f"{owner}/{repo}"
+    try:
+        output = load_repository_context(
+            repository=repository,
+            state=state,
+            issue_limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    log_audit(
+        input_text=f"GET /projects/{repository}/issues",
+        route={
+            "intent": "project_issues",
+            "executor": "planning",
+            "risk": "low",
+            "needs_confirmation": False,
+            "complexity": "low",
+            "reason": "GitHub Issues query for a project repository.",
+        },
+        executor="planning",
+        output_text=json.dumps(
+            {
+                "repository": output.get("repository"),
+                "issue_count": output.get("issue_count"),
+                "state": output.get("state"),
+            },
+            sort_keys=True,
+        ),
+        latency_ms=_latency_ms(start),
+    )
+    return ProjectIssuesResponse(**output)
+
+
+@app.post("/planning/task", response_model=PlanningTaskResponse)
+def planning_task(request: PlanningTaskRequest) -> PlanningTaskResponse:
+    start = time.perf_counter()
+    try:
+        output = create_planning_task(
+            repository=request.repository,
+            title=request.title,
+            body=request.body,
+            labels=request.labels,
+            assignees=request.assignees,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    log_audit(
+        input_text=f"POST /planning/task {request.title}",
+        route={
+            "intent": "planning_task_create",
+            "executor": "planning",
+            "risk": "medium",
+            "needs_confirmation": False,
+            "complexity": "low",
+            "reason": "Create a GitHub Issue as a project-scoped Buddy task.",
+        },
+        executor="planning",
+        output_text=json.dumps(
+            {
+                "repository": output.get("repository"),
+                "issue": output.get("issue", {}).get("number"),
+                "url": output.get("issue", {}).get("html_url"),
+            },
+            sort_keys=True,
+        ),
+        latency_ms=_latency_ms(start),
+    )
+    return PlanningTaskResponse(**output)
+
+
+@app.post("/github/pull-request", response_model=PullRequestResponse)
+def github_pull_request(request: PullRequestRequest) -> PullRequestResponse:
+    start = time.perf_counter()
+    try:
+        owner, repo = parse_repository(request.repository)
+        output = create_pull_request_with_files(
+            owner=owner,
+            repo=repo,
+            title=request.title,
+            body=request.body,
+            files=[_model_dump(file) for file in request.files],
+            head_branch=request.head_branch,
+            base_branch=request.base_branch,
+            commit_message=request.commit_message,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    log_audit(
+        input_text=f"POST /github/pull-request {request.repository} {request.title}",
+        route={
+            "intent": "pull_request_create",
+            "executor": "github",
+            "risk": "medium",
+            "needs_confirmation": False,
+            "complexity": "standard",
+            "reason": "Create a branch, commit explicit files, and open a GitHub pull request.",
+        },
+        executor="github",
+        output_text=json.dumps(
+            {
+                "repository": output.get("repository"),
+                "pull_request": output.get("pull_request", {}).get("number"),
+                "url": output.get("pull_request", {}).get("html_url"),
+                "file_count": len(output.get("files", [])),
+            },
+            sort_keys=True,
+        ),
+        latency_ms=_latency_ms(start),
+    )
+    return PullRequestResponse(**output)
 
 
 @app.post("/message", response_model=MessageResponse)

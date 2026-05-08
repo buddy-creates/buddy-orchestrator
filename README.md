@@ -8,7 +8,10 @@ It currently supports:
 - `GET /confirmations` to inspect pending/recent confirmations.
 - `GET /github/status` to verify Buddy's private GitHub credential.
 - `GET /projects` to list GitHub repositories visible to Buddy's token.
+- `GET /projects/{owner}/{repo}/issues` to list repo-scoped planning tasks.
 - `GET /planning/context` to explain Buddy's GitHub-backed cross-repo planning model.
+- `POST /planning/task` to create a GitHub Issue task.
+- `POST /github/pull-request` to propose explicit file changes through a branch and PR.
 - `POST /openclaw/message` for Telegram-friendly OpenClaw messages.
 - `POST /openclaw/command` for `/approve` and `/reject` commands from OpenClaw.
 - `POST /route` to inspect router output without executing the chosen executor.
@@ -162,6 +165,28 @@ GitHub-backed project registry:
 ```bash
 curl http://127.0.0.1:8787/projects
 curl http://127.0.0.1:8787/planning/context
+curl "http://127.0.0.1:8787/projects/buddy-creates/buddy-orchestrator/issues?limit=10"
+```
+
+Create a GitHub Issue planning task:
+
+```bash
+curl -X POST http://127.0.0.1:8787/planning/task \
+  -H "Content-Type: application/json" \
+  -d '{"repository":"buddy-creates/buddy-orchestrator","title":"Describe the next Buddy planning milestone","labels":["planning"]}'
+```
+
+Open a pull request with explicit file content:
+
+```bash
+curl -X POST http://127.0.0.1:8787/github/pull-request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repository":"buddy-creates/buddy-orchestrator",
+    "title":"Document Buddy planning flow",
+    "body":"Proposed by Buddy.",
+    "files":[{"path":"docs/planning-flow.md","content":"# Planning Flow\n"}]
+  }'
 ```
 
 Buddy uses GitHub as the cross-repo project registry. Repositories, issues,
@@ -225,6 +250,7 @@ python scripts/openclaw_command.py "/reject <id>"
 ```
 
 OpenClaw still owns Telegram. Buddy only provides local HTTP endpoints and helper scripts.
+See `docs/openclaw-buddy-bridge.md` for the cross-repo bridge contract.
 
 ## Configuration
 
@@ -244,4 +270,4 @@ Environment variables:
 
 ## Safety
 
-Buddy will not automatically send email, modify finance data, deploy, or commit code. This version classifies, logs, calls local Ollama for normal chat, and blocks code/build tasks behind confirmation.
+Buddy will not automatically send email, modify finance data, deploy, or merge code. Telegram-triggered code/build tasks stay behind confirmation. The local `/github/pull-request` endpoint can commit explicit file content to a branch and open a PR, but it does not merge it.

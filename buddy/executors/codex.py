@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from buddy.executors import gpt_oss
+from buddy.planning import load_context
 
 
 TASK_DIR = Path("agent-workspace/tasks")
@@ -84,5 +85,36 @@ def _build_execution_brief_prompt(text: str, route: dict[str, Any], path: Path) 
         "implementation steps plus one safety check. Keep it under 90 words.\n\n"
         f"User request: {text}\n"
         f"Task spec path: {path}\n"
-        f"Route: {json.dumps(route, sort_keys=True)}"
+        f"Route: {json.dumps(route, sort_keys=True)}\n"
+        f"GitHub planning context: {_planning_context_excerpt()}"
     )
+
+
+def _planning_context_excerpt() -> str:
+    try:
+        context = load_context()
+    except Exception as exc:
+        return f"unavailable: {exc}"
+
+    registry = context.get("registry", {})
+    repositories = registry.get("repositories", [])
+    repo_summaries = []
+    for repo in repositories[:8]:
+        if not isinstance(repo, dict):
+            continue
+        repo_summaries.append(
+            {
+                "full_name": repo.get("full_name"),
+                "description": repo.get("description"),
+                "default_branch": repo.get("default_branch"),
+                "permissions": repo.get("permissions"),
+            }
+        )
+
+    excerpt = {
+        "source": context.get("source"),
+        "repository_count": registry.get("repository_count"),
+        "repositories": repo_summaries,
+        "operating_model": context.get("operating_model"),
+    }
+    return json.dumps(excerpt, sort_keys=True)
