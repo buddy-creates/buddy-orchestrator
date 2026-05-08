@@ -84,14 +84,16 @@ For any non-trivial request, follow this loop:
 3. Technical Spec
    - Define architecture, data model, adapters, APIs, migrations, failure modes, security/privacy risks, and test plan.
 
-4. Implementation
-   - Make the smallest coherent change.
-   - Prefer clean architecture over cleverness.
-   - Keep cognitive complexity low.
-   - Keep external systems behind adapters.
+4. Relf Loop Implementation
+   - Use a Reason -> Execute -> Learn -> Fix loop for each implementation slice.
+   - Reason: restate the slice goal, likely files, risks, and tests.
+   - Execute: make the smallest coherent local code, doc, or test change.
+   - Learn: run relevant verification, read failures, and update run artifacts.
+   - Fix: repair root causes and rerun failed checks until they pass or a real blocker is documented.
+   - Never claim tests passed unless they actually passed.
 
 5. Verification
-   - Run format, lint, typecheck, tests, build, and dead-code checks.
+   - Run format, lint, typecheck, tests, build, and dead-code checks where configured.
 
 6. Handoff
    - Summarize what changed.
