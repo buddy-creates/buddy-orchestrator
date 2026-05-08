@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.env
+audit.db
+audit.db-*
+.DS_Store
+agent-workspace/tasks/*.json
+!agent-workspace/tasks/.gitkeep
+
