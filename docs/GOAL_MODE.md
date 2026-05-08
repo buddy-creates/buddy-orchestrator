@@ -17,7 +17,46 @@ Given a high-level user request, Goal Mode should:
 7. Implement the smallest safe slice.
 8. Add behavior-focused tests.
 9. Run verification.
-10. Prepare a PR handoff.
+10. Reflect on failures, gaps, and next fixes.
+11. Prepare a PR handoff.
+
+## Relf Loop Requirement
+
+Goal Mode must use a Relf-style loop: **Reason -> Execute -> Learn -> Fix**.
+
+This loop makes Codex autonomous over implementation while keeping consequences gated by Buddy.
+
+For every implementation slice:
+
+### 1. Reason
+
+- Restate the goal for this slice.
+- Identify files likely to change.
+- Identify risks and tests needed.
+- Decide the smallest safe change to make next.
+
+### 2. Execute
+
+- Make the smallest coherent code, doc, or test change.
+- Keep changes local and scoped.
+- Avoid unrelated refactors.
+- Do not push, merge, deploy, send external messages, delete data, or use real credentials without confirmation.
+
+### 3. Learn
+
+- Run the relevant verification commands.
+- Read failures carefully.
+- Update `commands.log` and `verification.md`.
+- Distinguish between code failures, missing credentials, environmental blockers, and safety blockers.
+
+### 4. Fix
+
+- If checks fail, fix the root cause.
+- Re-run the failed checks.
+- Repeat the loop until checks pass or a real blocker is documented.
+- Do not stop after the first failed test unless the failure requires human input, credentials, production access, or safety confirmation.
+
+Never claim tests passed unless they actually passed.
 
 ## What Goal Mode Must Not Do Without Confirmation
 
@@ -106,6 +145,13 @@ agent-workspace/runs/<run_id>/
 ```
 
 These artifacts make each run inspectable, resumable, and auditable.
+
+The Relf loop should update these artifacts as it works:
+
+- `plan.md` records the current implementation slice and next step.
+- `commands.log` records commands attempted and outputs/summaries.
+- `verification.md` records checks run, failures, fixes, and final state.
+- `handoff.md` records the final result, risks, limitations, and follow-ups.
 
 ## Principle
 
