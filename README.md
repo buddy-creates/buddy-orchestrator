@@ -7,6 +7,8 @@ It currently supports:
 - `POST /confirm` to approve or reject a pending confirmation.
 - `GET /confirmations` to inspect pending/recent confirmations.
 - `GET /github/status` to verify Buddy's private GitHub credential.
+- `GET /projects` to list GitHub repositories visible to Buddy's token.
+- `GET /planning/context` to explain Buddy's GitHub-backed cross-repo planning model.
 - `POST /openclaw/message` for Telegram-friendly OpenClaw messages.
 - `POST /openclaw/command` for `/approve` and `/reject` commands from OpenClaw.
 - `POST /route` to inspect router output without executing the chosen executor.
@@ -154,6 +156,17 @@ GitHub account status:
 ```bash
 curl http://127.0.0.1:8787/github/status
 ```
+
+GitHub-backed project registry:
+
+```bash
+curl http://127.0.0.1:8787/projects
+curl http://127.0.0.1:8787/planning/context
+```
+
+Buddy uses GitHub as the cross-repo project registry. Repositories, issues,
+pull requests, and GitHub Projects are the shared planning surface. Local files
+such as `.env`, `audit.db`, logs, and OpenClaw runtime state stay private.
 
 Expected router behavior:
 - `"build me a dashboard"` routes to the `codex` executor with `intent: code_task`, `risk: medium`, and `needs_confirmation: true`.

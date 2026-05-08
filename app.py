@@ -20,6 +20,7 @@ from buddy.audit import (
 from buddy.config import load_environment
 from buddy.executors import codex, fallback, gpt_oss
 from buddy.github import status as github_status
+from buddy.planning import load_context, load_projects
 from buddy.router import classify
 
 
@@ -115,6 +116,26 @@ class GitHubStatusResponse(BaseModel):
     owner: str | None = None
     default_repo: str | None = None
     api_url: str
+    message: str
+
+
+class ProjectsResponse(BaseModel):
+    source: str
+    configured: bool
+    authenticated: bool
+    login: str | None = None
+    owner: str | None = None
+    default_repo: str | None = None
+    api_url: str
+    repositories: list[dict[str, Any]]
+    repository_count: int
+    message: str
+
+
+class PlanningContextResponse(BaseModel):
+    source: str
+    registry: dict[str, Any]
+    operating_model: dict[str, Any]
     message: str
 
 
@@ -238,6 +259,62 @@ def github_status_endpoint() -> GitHubStatusResponse:
         latency_ms=_latency_ms(start),
     )
     return GitHubStatusResponse(**output)
+
+
+@app.get("/projects", response_model=ProjectsResponse)
+def projects() -> ProjectsResponse:
+    start = time.perf_counter()
+    output = load_projects()
+    log_audit(
+        input_text="GET /projects",
+        route={
+            "intent": "project_registry",
+            "executor": "planning",
+            "risk": "low",
+            "needs_confirmation": False,
+            "complexity": "low",
+            "reason": "GitHub-backed cross-repo project registry.",
+        },
+        executor="planning",
+        output_text=json.dumps(
+            {
+                "source": output.get("source"),
+                "repository_count": output.get("repository_count"),
+                "message": output.get("message"),
+            },
+            sort_keys=True,
+        ),
+        latency_ms=_latency_ms(start),
+    )
+    return ProjectsResponse(**output)
+
+
+@app.get("/planning/context", response_model=PlanningContextResponse)
+def planning_context() -> PlanningContextResponse:
+    start = time.perf_counter()
+    output = load_context()
+    log_audit(
+        input_text="GET /planning/context",
+        route={
+            "intent": "planning_context",
+            "executor": "planning",
+            "risk": "low",
+            "needs_confirmation": False,
+            "complexity": "low",
+            "reason": "Cross-repo planning context built from GitHub registry.",
+        },
+        executor="planning",
+        output_text=json.dumps(
+            {
+                "source": output.get("source"),
+                "repository_count": output.get("registry", {}).get("repository_count"),
+                "message": output.get("message"),
+            },
+            sort_keys=True,
+        ),
+        latency_ms=_latency_ms(start),
+    )
+    return PlanningContextResponse(**output)
 
 
 @app.post("/message", response_model=MessageResponse)
