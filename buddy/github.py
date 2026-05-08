@@ -28,6 +28,7 @@ def _default_repo() -> str | None:
 
 
 def status() -> dict[str, Any]:
+    load_environment()
     api_url = _api_url()
     token = _token()
     base = {
